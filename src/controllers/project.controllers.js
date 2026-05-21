@@ -13,6 +13,8 @@ const getProjects = asyncHandler(async (req, res) => {
       $match: {
         user: new mongoose.Types.ObjectId(req.user._id),
       },
+    },
+    {
       $lookup: {
         from: "projects",
         localField: "project",
@@ -115,12 +117,18 @@ const updateProject = asyncHandler(async (req, res) => {
 const deleteProject = asyncHandler(async (req, res) => {
   const { projectId } = req.params;
 
-  const project = await Project.findByIdAndDelete(projectId);
+  const project = await Project.findById(projectId);
 
   if (!project) {
     throw new ApiError(404, "Project not found");
   }
 
+  // Authorization check - only project creator can delete
+  if (project.createdBy.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, "You are not authorized to delete this project");
+  }
+
+  await Project.findByIdAndDelete(projectId);
   await ProjectMember.deleteMany({
     project: projectId,
   });
@@ -136,7 +144,7 @@ const addMemberToProject = asyncHandler(async (req, res) => {
   if (!user) {
     throw new ApiError(404, "User not found");
   }
-  await ProjectMember.findOneAndUpdate(
+  const projectMember = await ProjectMember.findOneAndUpdate(
     {
       user: new mongoose.Types.ObjectId(user._id),
       project: new mongoose.Types.ObjectId(projectId),
@@ -153,7 +161,13 @@ const addMemberToProject = asyncHandler(async (req, res) => {
   );
   return res
     .status(200)
-    .json(new ApiResponse(200, {}, "Member added to project successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        projectMember,
+        "Member added to project successfully",
+      ),
+    );
 });
 
 const getProjectMembers = asyncHandler(async (req, res) => {
@@ -181,8 +195,9 @@ const getProjectMembers = asyncHandler(async (req, res) => {
           {
             $project: {
               username: 1,
-              fullname: 1,
+              fullName: 1,
               avatar: 1,
+              email: 1,
             },
           },
         ],

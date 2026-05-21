@@ -52,9 +52,13 @@ app.use(express.static("public"));
 app.use(cookieParser());
 
 // CORS
+const corsOrigins = process.env.CORS_ORIGIN === "*" 
+  ? "*" 
+  : process.env.CORS_ORIGIN?.split(",") || ["http://localhost:5173", "http://localhost:5174"];
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:5173"],
+    origin: corsOrigins,
 
     credentials: true,
 
@@ -74,6 +78,7 @@ import taskRouter from "./routes/task.routes.js";
 app.use("/api/v1/healthcheck", healthcheckRouter);
 
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/users", authRouter);
 app.use("/api/v1/projects", projectRouter);
 
 app.get("/", (req, res) => {

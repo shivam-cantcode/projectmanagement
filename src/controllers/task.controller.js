@@ -28,13 +28,82 @@ const getTasks = asyncHandler(async (req, res) => {
     throw new ApiError(403, "You are not authorized");
   }
 
-  const tasks = await Task.find({
-    project: new mongoose.Types.ObjectId(projectId),
-  })
-    .populate("assignedTo", "username fullName avatar")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
+  const tasks = await Task.aggregate([
+    {
+      $match: {
+        project: new mongoose.Types.ObjectId(projectId),
+      },
+    },
+    {
+      $sort: { createdAt: -1 },
+    },
+    {
+      $skip: skip,
+    },
+    {
+      $limit: limit,
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "assignedTo",
+        foreignField: "_id",
+        as: "assignedTo",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              fullName: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "subtasks",
+        localField: "_id",
+        foreignField: "task",
+        as: "subtasks",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "createdBy",
+              foreignField: "_id",
+              as: "createdBy",
+              pipeline: [
+                {
+                  $project: {
+                    _id: 1,
+                    username: 1,
+                    fullName: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              createdBy: {
+                $arrayElemAt: ["$createdBy", 0],
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        assignedTo: {
+          $arrayElemAt: ["$assignedTo", 0],
+        },
+      },
+    },
+  ]);
 
   const totalTasks = await Task.countDocuments({
     project: new mongoose.Types.ObjectId(projectId),
@@ -70,6 +139,11 @@ const createTask = asyncHandler(async (req, res) => {
     throw new ApiError(400, "assignedTo is required");
   }
 
+  const assigneeUser = await User.findOne({ email: assignedTo });
+  if (!assigneeUser) {
+    throw new ApiError(404, "Assignee user not found with that email");
+  }
+
   const files = req.files || [];
 
   const attachments = files.map((file) => ({
@@ -82,7 +156,7 @@ const createTask = asyncHandler(async (req, res) => {
     title,
     description: description,
     project: new mongoose.Types.ObjectId(projectId),
-    assignedTo: new mongoose.Types.ObjectId(assignedTo),
+    assignedTo: assigneeUser._id,
     status,
     assignedBy: new mongoose.Types.ObjectId(req.user._id),
     attachments: attachments,
