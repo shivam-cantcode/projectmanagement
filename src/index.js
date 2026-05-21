@@ -1,8 +1,14 @@
 import dotenv from "dotenv";
 import app from "./app.js";
 import connectDB from "./db/db.js";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 dotenv.config({
-  path: "./.env",
+  path: `${__dirname}/../.env`,
 });
 
 const port = process.env.PORT || 3000;
